@@ -6,12 +6,12 @@
     <groupId>com.example</groupId>
     <artifactId>kafka-ecommerce-parent</artifactId>
     <version>1.0-SNAPSHOT</version>
-    <packaging>pom</packaging> <!-- 父项目使用 pom 类型 -->
+    <packaging>pom</packaging> <!-- The parent project uses pom type -->
 
-    <!-- 依赖版本管理 -->
+<!-- Dependency version management -->
     <dependencyManagement>
         <dependencies>
-            <!-- Spring Boot 依赖版本管理 -->
+            <!-- Spring Boot dependency version management -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
@@ -20,21 +20,21 @@
                 <type>pom</type>
             </dependency>
 
-            <!-- Kafka Clients 版本管理 -->
+           <!-- Kafka Clients version management -->
             <dependency>
                 <groupId>org.apache.kafka</groupId>
                 <artifactId>kafka-clients</artifactId>
                 <version>3.1.0</version>
             </dependency>
 
-            <!-- MySQL Connector 版本管理 -->
+            <!-- MySQL Connector version management -->
             <dependency>
                 <groupId>mysql</groupId>
                 <artifactId>mysql-connector-java</artifactId>
                 <version>8.0.33</version>
             </dependency>
 
-            <!-- JUnit 版本管理 -->
+            <!-- JUnit version management -->
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter</artifactId>
@@ -44,9 +44,9 @@
         </dependencies>
     </dependencyManagement>
 
-    <!-- 实际的依赖引入，供所有子项目使用 -->
+   <!-- Actual dependency introduction, for use by all sub-projects -->
     <dependencies>
-        <!-- 基础 Spring Boot 启动器 -->
+        <!-- Basic Spring Boot starter -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
@@ -92,7 +92,7 @@
         </dependency>
     </dependencies>
 
-    <!-- 构建插件 -->
+    <!-- Build plugin -->
     <build>
         <plugins>
             <plugin>
@@ -103,12 +103,12 @@
         </plugins>
     </build>
 
-    <!-- Java 版本 -->
+    <!-- Java version -->
     <properties>
         <java.version>21</java.version>
     </properties>
 
-    <!-- 子项目模块 -->
+    <!-- Subproject module -->
     <modules>
         <module>cart-service</module>
         <module>order-service</module>
