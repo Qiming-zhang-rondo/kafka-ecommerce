@@ -74,6 +74,8 @@ spring.kafka.bootstrap-servers=localhost:9092
 - **Docker Support**: Containerize all microservices for easier deployment.
 - **Monitoring**: Add tools like Prometheus and Grafana for monitoring.
 
+### using dotnet run --project Kafka /Users/qiming/BenchmarkDriver/EventBenchmark/Configuration/kafka_local.json for experiment
+
 ## Contributing
 
 Contributions are welcome! Please fork this repository, make changes, and submit a pull request.
