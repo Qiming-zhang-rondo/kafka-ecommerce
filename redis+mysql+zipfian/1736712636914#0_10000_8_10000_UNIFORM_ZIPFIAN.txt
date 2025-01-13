@@ -1,0 +1,69 @@
+Run from 1/12/2025 8:10:36PM to 1/12/2025 8:11:36PM
+===========================================
+Transaction: CUSTOMER_SESSION - #968 - Average end-to-end latency: 1832.7249163223116
+Transaction: QUERY_DASHBOARD - #0 - Average end-to-end latency: 0
+Transaction: PRICE_UPDATE - #982 - Average end-to-end latency: 1607.55351221996
+Transaction: UPDATE_PRODUCT - #16678 - Average end-to-end latency: 381.5007828876358
+Transaction: UPDATE_DELIVERY - #0 - Average end-to-end latency: 0
+Transaction: NONE - #0 - Average end-to-end latency: 0
+Number of seconds: 59.99938
+Number of completed transactions: 18628
+Transactions per second: 310.4698748553735
+=====================================================
+5 blocks for epoch 10000
+Block 1 results:
+Transaction: CUSTOMER_SESSION - #247 - Average end-to-end latency: 3498.505870445343
+Transaction: QUERY_DASHBOARD - #0 - Average end-to-end latency: 0
+Transaction: PRICE_UPDATE - #46 - Average end-to-end latency: 13.17554347826087
+Transaction: UPDATE_PRODUCT - #2397 - Average end-to-end latency: 199.0421531080517
+Transaction: UPDATE_DELIVERY - #0 - Average end-to-end latency: 0
+Transaction: NONE - #0 - Average end-to-end latency: 0
+Number of completed transactions: 2690
+Transactions per second: 269
+===========================================
+Block 2 results:
+Transaction: CUSTOMER_SESSION - #288 - Average end-to-end latency: 3094.888913194446
+Transaction: QUERY_DASHBOARD - #0 - Average end-to-end latency: 0
+Transaction: PRICE_UPDATE - #106 - Average end-to-end latency: 19.200905660377348
+Transaction: UPDATE_PRODUCT - #2562 - Average end-to-end latency: 464.7380620608905
+Transaction: UPDATE_DELIVERY - #0 - Average end-to-end latency: 0
+Transaction: NONE - #0 - Average end-to-end latency: 0
+Number of completed transactions: 2956
+Transactions per second: 295.6
+===========================================
+Block 3 results:
+Transaction: CUSTOMER_SESSION - #143 - Average end-to-end latency: 46.62944755244755
+Transaction: QUERY_DASHBOARD - #0 - Average end-to-end latency: 0
+Transaction: PRICE_UPDATE - #198 - Average end-to-end latency: 37.13844444444443
+Transaction: UPDATE_PRODUCT - #3058 - Average end-to-end latency: 584.224454545455
+Transaction: UPDATE_DELIVERY - #0 - Average end-to-end latency: 0
+Transaction: NONE - #0 - Average end-to-end latency: 0
+Number of completed transactions: 3399
+Transactions per second: 339.9
+===========================================
+Block 4 results:
+Transaction: CUSTOMER_SESSION - #110 - Average end-to-end latency: 44.66960909090909
+Transaction: QUERY_DASHBOARD - #0 - Average end-to-end latency: 0
+Transaction: PRICE_UPDATE - #227 - Average end-to-end latency: 467.0770837004406
+Transaction: UPDATE_PRODUCT - #3065 - Average end-to-end latency: 530.8038469820561
+Transaction: UPDATE_DELIVERY - #0 - Average end-to-end latency: 0
+Transaction: NONE - #0 - Average end-to-end latency: 0
+Number of completed transactions: 3402
+Transactions per second: 340.2
+===========================================
+Block 5 results:
+Transaction: CUSTOMER_SESSION - #180 - Average end-to-end latency: 39.09496666666668
+Transaction: QUERY_DASHBOARD - #0 - Average end-to-end latency: 0
+Transaction: PRICE_UPDATE - #405 - Average end-to-end latency: 3611.348809876544
+Transaction: UPDATE_PRODUCT - #5596 - Average end-to-end latency: 228.99123087919853
+Transaction: UPDATE_DELIVERY - #0 - Average end-to-end latency: 0
+Transaction: NONE - #0 - Average end-to-end latency: 0
+Number of completed transactions: 6181
+Transactions per second: 618.1
+===========================================
+================== Aborts ==================
+Transaction: PRICE_UPDATE: 969
+Transaction: UPDATE_PRODUCT: 0
+Transaction: CUSTOMER_SESSION: 7447
+===========================================
+=================    THE END   ================
