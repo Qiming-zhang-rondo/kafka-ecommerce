@@ -2,6 +2,16 @@
 
 This repository contains the **Kafka E-Commerce Project**, a microservices-based e-commerce system built with Spring Boot, Kafka, and MySQL. The system handles various functionalities like product management, order processing, stock management, and customer sessions.
 
+
+### Branch Overview
+
+- **`main`**: The baseline version of the project with the original MySQL-only implementation.
+- **`redis-mysql`**: Optimized version integrating Redis as a caching layer alongside MySQL.
+- **`kafka-driver`**: Enhanced version with Kafka modules for event-driven experiments.
+- **`experiment-results`**: Dedicated branch to store experimental results and related data.
+
+
+
 ## Features
 
 - **Microservices Architecture**: Modularized services for scalability and maintainability.
