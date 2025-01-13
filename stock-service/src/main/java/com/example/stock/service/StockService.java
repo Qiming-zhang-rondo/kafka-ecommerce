@@ -15,10 +15,13 @@ import com.example.stock.config.StockConfig;
 import com.example.stock.kafka.StockKafkaProducer;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,6 +29,9 @@ import java.util.stream.Collectors;
 
 @Service
 public class StockService implements IStockService {
+
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
 
     private final StockRepository stockRepository;
     private final StockConfig stockConfig;
@@ -43,21 +49,20 @@ public class StockService implements IStockService {
     @Transactional
     @Override
     public void processProductUpdate(ProductUpdated productUpdated) {
-        
+
         StockItem stockItem = stockRepository.findForUpdate(productUpdated.getSellerId(),
                 productUpdated.getProductId());
         if (stockItem == null) {
-            // log warnning and skip 
+            // log warnning and skip
             logger.warn("Stock item not found for product update. Ignoring message. SellerId: {}, ProductId: {}",
                     productUpdated.getSellerId(), productUpdated.getProductId());
             return;
         }
 
-    
         stockItem.setVersion(productUpdated.getVersion());
-        stockRepository.save(stockItem); 
+        stockRepository.save(stockItem);
 
- // Construct the Kafka message TransactionMark
+        // Construct the Kafka message TransactionMark
         TransactionMark transactionMark = new TransactionMark(
                 productUpdated.getVersion(),
                 TransactionType.UPDATE_PRODUCT,
@@ -65,7 +70,6 @@ public class StockService implements IStockService {
                 MarkStatus.SUCCESS,
                 "stock");
 
-       
         stockKafkaProducer.sendProductUpdate(transactionMark);
         logger.info("Sending TransactionMark: {}", transactionMark);
 
@@ -79,22 +83,37 @@ public class StockService implements IStockService {
         logger.info("Found {} items in checkout: {}", checkout.getItems().size(), checkout.getItems());
         List<StockItem> items = new ArrayList<>();
 
-       
         for (CartItem item : checkout.getItems()) {
- 
             logger.info("Looking up StockItem for sellerId: {}, productId: {}", item.getSellerId(),
                     item.getProductId());
-            Optional<StockItem> stockItemOpt = stockRepository
-                    .findById(new StockItemId(item.getSellerId(), item.getProductId()));
 
-            if (stockItemOpt.isPresent()) {
-                StockItem stockItem = stockItemOpt.get();
-                items.add(stockItem);
-                logger.info("StockItem found: {}", stockItem);
+            // 1. Generate Redis key
+            String redisKey = "stock:" + item.getSellerId() + ":" + item.getProductId();
+
+            // 2. Try to get StockItem from Redis
+            StockItem stockItem = (StockItem) redisTemplate.opsForValue().get(redisKey);
+
+            if (stockItem == null) {
+                // 3. If not found in Redis, fallback to MySQL
+                Optional<StockItem> stockItemOpt = stockRepository
+                        .findById(new StockItemId(item.getSellerId(), item.getProductId()));
+                if (stockItemOpt.isPresent()) {
+                    stockItem = stockItemOpt.get();
+
+                    // 4. Cache the MySQL result in Redis
+                    redisTemplate.opsForValue().set(redisKey, stockItem);
+                    logger.info("StockItem found in MySQL and cached in Redis: {}", stockItem);
+                } else {
+                    logger.warn("StockItem not found for sellerId: {}, productId: {}", item.getSellerId(),
+                            item.getProductId());
+                    continue;
+                }
             } else {
-                logger.warn("StockItem not found for sellerId: {}, productId: {}", item.getSellerId(),
-                        item.getProductId());
+                logger.info("StockItem found in Redis: {}", stockItem);
             }
+
+            // 5. Add the StockItem to the items list
+            items.add(stockItem);
         }
 
         if (items.isEmpty()) {
@@ -109,7 +128,8 @@ public class StockService implements IStockService {
         List<StockItem> stockItemsReserved = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now();
 
-        // Iterate through each CartItem in checkout to find the corresponding stock item
+        // Iterate through each CartItem in checkout to find the corresponding stock
+        // item
         for (CartItem item : checkout.getItems()) {
             logger.info("Processing CartItem: {}", item);
 
@@ -139,13 +159,20 @@ public class StockService implements IStockService {
         // If any stock is successfully retained, update the stock
         if (!stockItemsReserved.isEmpty()) {
             logger.info("Saving reserved StockItems: {}", stockItemsReserved.size());
-            stockRepository.saveAll(stockItemsReserved); // Batch save the updated stock items
-            stockRepository.flush(); // Make sure all updates are committed
+
+            // Batch save the updated stock items to MySQL
+            stockRepository.saveAll(stockItemsReserved);
+            stockRepository.flush(); // Ensure all updates are committed to MySQL
+
+            // Update Redis cache for each reserved stock item
+            for (StockItem stockItem : stockItemsReserved) {
+                String redisKey = generateRedisKey(stockItem.getSellerId(), stockItem.getProductId());
+                redisTemplate.opsForValue().set(redisKey, stockItem);
+                logger.info("Updated Redis cache for StockItem: {}", redisKey);
+            }
         } else {
             logger.warn("No StockItems were reserved for instanceId: {}", checkout.getInstanceId());
         }
-
-        
 
         if (!cartItemsReserved.isEmpty()) {
             StockConfirmed stockConfirmed = new StockConfirmed(
@@ -195,14 +222,14 @@ public class StockService implements IStockService {
         LocalDateTime now = LocalDateTime.now();
 
         for (OrderItem item : payment.getItems()) {
-           // Query stock items one by one
+            // Query stock items one by one
             StockItem stockItem = stockRepository.findById(item.getSellerId(), item.getProductId());
 
             if (stockItem != null) {
                 // Update the retained quantity of stock
                 stockItem.setQtyReserved(stockItem.getQtyReserved() - item.getQuantity());
                 stockItem.setUpdatedAt(now);
-                stockRepository.save(stockItem); 
+                stockRepository.save(stockItem);
             }
         }
     }
@@ -240,12 +267,49 @@ public class StockService implements IStockService {
 
     @Override
     public void cleanup() {
+        logger.warn("Starting cleanup for all stock data...");
+
+        // clean redis
+        Set<String> keys = redisTemplate.keys("stock:*");
+        if (keys != null && !keys.isEmpty()) {
+            redisTemplate.delete(keys);
+            logger.info("Deleted {} keys from Redis.", keys.size());
+        } else {
+            logger.info("No keys found in Redis for cleanup.");
+        }
+
+        // clean mysql
         stockRepository.deleteAll();
+        logger.info("MySQL stock data cleanup completed.");
     }
 
     @Override
     public void reset() {
-        stockRepository.reset(stockConfig.getDefaultInventory());
+        logger.warn("Starting reset for all stock data...");
+
+        // find all from mysql
+        List<StockItem> stockItems = stockRepository.findAll();
+        if (stockItems.isEmpty()) {
+            logger.warn("No stock items found in MySQL for reset.");
+            return;
+        }
+
+        // reset for mysql
+        stockItems.forEach(item -> {
+            item.setQtyAvailable(stockConfig.getDefaultInventory());
+            item.setQtyReserved(0);
+            item.setOrderCount(0);
+            item.setUpdatedAt(LocalDateTime.now());
+        });
+        stockRepository.saveAll(stockItems);
+        logger.info("MySQL stock data reset completed.");
+
+        // reset for redis
+        stockItems.forEach(item -> {
+            String redisKey = generateRedisKey(item.getSellerId(), item.getProductId());
+            redisTemplate.opsForValue().set(redisKey, item);
+        });
+        logger.info("Redis cache reset completed.");
     }
 
     @Override
@@ -271,8 +335,17 @@ public class StockService implements IStockService {
             existingStockItem = stockItem;
         }
 
-        // Use the save method to insert or update stock items
+        // Use the save method to insert or update stock items into mysql
         stockRepository.save(existingStockItem);
+        // save into redis
+        String redisKey = generateRedisKey(stockItem.getSellerId(), stockItem.getProductId());
+        logger.info("Writing to Redis with key: {}, value: {}", redisKey, stockItem);
+        redisTemplate.opsForValue().set(redisKey, existingStockItem, 30, TimeUnit.MINUTES);
+
+    }
+
+    private String generateRedisKey(int sellerId, int productId) {
+        return "StockItem::" + sellerId + "::" + productId;
     }
 
     @Override
