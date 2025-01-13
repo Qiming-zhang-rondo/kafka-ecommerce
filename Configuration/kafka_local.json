@@ -1,0 +1,113 @@
+﻿{
+  "enabled": true,
+  "qtyPerProduct": 10000,
+  "executionTime": 60000,
+  "epoch": 10000,
+  "delayBetweenRequests": 0,
+  "delayBetweenRuns": 0,
+  "concurrencyLevel": 32,
+  "connectionString": "Data Source=file.db",
+  "numCustomers": 10000,
+  "numProdPerSeller": 10,
+  "transactionDistribution": {
+    "CUSTOMER_SESSION": 30,
+    "PRICE_UPDATE": 38,
+    "UPDATE_PRODUCT": 100
+  },
+  "ingestionConfig": {
+    "strategy": "WORKER_PER_CPU",
+    "concurrencyLevel": 6,
+    "mapTableToUrl": {
+      "stock_items": "http://127.0.0.1:5003/stock/",
+      "sellers": "http://127.0.0.1:5006/seller/",
+      "customers": "http://127.0.0.1:5011/customer/",
+      "products": "http://127.0.0.1:5008/product/"
+    }
+  },
+  "runs": [
+    {
+      "numProducts": 10000,
+      "sellerDistribution": "UNIFORM",
+      "keyDistribution": "UNIFORM"
+    }
+  ],
+  "postRunTasks": [
+    {
+      "name": "cart",
+      "url": "http://127.0.0.1:5001/cart/reset"
+    },
+    {
+      "name": "stock",
+      "url": "http://127.0.0.1:5003/stock/reset"
+    },
+    {
+      "name": "product",
+      "url": "http://127.0.0.1:5008/product/reset"
+    }
+  ],
+  "postExperimentTasks": [
+    {
+      "name": "cart",
+      "url": "http://127.0.0.1:5001/cart/cleanup"
+    },
+    {
+      "name": "stock",
+      "url": "http://127.0.0.1:5003/stock/cleanup"
+    },
+    {
+      "name": "product",
+      "url": "http://127.0.0.1:5008/product/cleanup"
+    }
+  ],
+  "streamingConfig": {
+    "type": null,
+    "host": "localhost",
+    "port": 6379,
+    "streams": [
+      "DeliveryNotification",
+      "InvoiceIssued",
+      "PaymentConfirmed",
+      "PaymentFailed",
+      "Product",
+      "ProductUpdated",
+      "PriceUpdated",
+      "ReserveStock",
+      "ShipmentNotification",
+      "StockConfirmed",
+      "ReserveStockFailed"
+    ]
+  },
+  "customerWorkerConfig": {
+    "maxNumberKeysToBrowse": 10,
+    "maxNumberKeysToAddToCart": 10,
+    "minMaxQtyRange": {
+      "min": 1,
+      "max": 10
+    },
+    "delayBetweenRequestsRange": {
+      "min": 1,
+      "max": 1000
+    },
+    "checkoutProbability": 100,
+    "voucherProbability": 5,
+    "productUrl": "http://127.0.0.1:5008/product/",
+    "cartUrl": "http://127.0.0.1:5001/cart",
+    "interactive": false
+  },
+  "sellerWorkerConfig": {
+    "interactive": false,
+    "delayBetweenRequestsRange": {
+      "min": 1,
+      "max": 1000
+    },
+    "adjustRange": {
+      "min": 1,
+      "max": 10
+    },
+    "sellerUrl": "http://127.0.0.1:5006/seller/",
+    "productUrl": "http://127.0.0.1:5008/product/"
+  },
+  "deliveryWorkerConfig": {
+    "shipmentUrl": "http://127.0.0.1:5005/shipment/"
+  }
+}
