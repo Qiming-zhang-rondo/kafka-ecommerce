@@ -7,8 +7,8 @@ This repository contains the **Kafka E-Commerce Project**, a microservices-based
 
 - **`main`**: The baseline version of the project with the original MySQL-only implementation.
 - **`redis-mysql`**: Optimized version integrating Redis as a caching layer alongside MySQL.
-- **`kafka-driver`**: Enhanced version with Kafka modules for event-driven experiments.
-- **`experiment-results`**: Dedicated branch to store experimental results and related data.
+- **`kafka-driver`**: Online Market Benchmark Driver with new added Kafka modules for event-driven experiments.
+- **`experiment-results`**: Experimental results and related data.
 
 
 
