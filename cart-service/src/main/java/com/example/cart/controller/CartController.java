@@ -12,10 +12,13 @@ import com.example.common.requests.CustomerCheckout;
 import com.example.common.driver.MarkStatus;
 import com.example.common.entities.CartStatus;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -25,6 +28,12 @@ import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/cart")
 public class CartController {
+
+    @Autowired
+    private RedisTemplate<String, Cart> cartRedisTemplate;
+
+    @Autowired
+    private RedisTemplate<String, CartItem> cartItemRedisTemplate;
 
     @Autowired
     private CartService cartService;
@@ -40,38 +49,52 @@ public class CartController {
 
     private static final Logger logger = LoggerFactory.getLogger(CartKafkaProducer.class);
 
-    @RequestMapping(value = "/{customerId}/add", method = {RequestMethod.PUT, RequestMethod.PATCH})
+    @RequestMapping(value = "/{customerId}/add", method = { RequestMethod.PUT, RequestMethod.PATCH })
     public ResponseEntity<?> addItem(
             @PathVariable int customerId,
             @RequestBody com.example.common.entities.CartItem item) {
-        logger.info("received add cart message: {}",item);
+        logger.info("received add cart message: {}", item);
 
         if (item.getQuantity() <= 0) {
             return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
                     .body("Item " + item.getProductId() + " shows no positive quantity.");
         }
 
-        Cart cart = cartRepository.findByCustomerId(customerId);
+        String redisKey = "cart:" + customerId;
+
+        // Step 1: try to get cart from redis
+        Cart cart = (Cart) cartRedisTemplate.opsForValue().get(redisKey);
+
         if (cart != null && cart.getStatus() == CartStatus.CHECKOUT_SENT) {
             return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
                     .body("Cart for customer " + customerId + " already sent for checkout.");
         }
 
         if (cart == null) {
-            cart = new Cart();
-            cart.setCustomerId(customerId);
-            cart.setStatus(CartStatus.OPEN);
 
-            cartRepository.save(cart);
+            cart = cartRepository.findByCustomerId(customerId);
+            if (cart == null) {
+
+                cart = new Cart();
+                cart.setCustomerId(customerId);
+                cart.setStatus(CartStatus.OPEN);
+            }
         }
 
+        // Step 2: update cart item
         CartItemId cartItemId = new CartItemId(customerId, item.getSellerId(), item.getProductId());
-        CartItem existingItem = cartItemRepository.findById(cartItemId).orElse(null);
+        boolean itemUpdated = false;
 
-        if (existingItem != null) {
-            existingItem.setQuantity(existingItem.getQuantity() + item.getQuantity());
-            cartItemRepository.save(existingItem);
-        } else {
+        for (CartItem existingItem : cart.getItems()) {
+            if (existingItem.getId().equals(cartItemId)) {
+                existingItem.setQuantity(existingItem.getQuantity() + item.getQuantity());
+                itemUpdated = true;
+                break;
+            }
+        }
+
+        if (!itemUpdated) {
+            // add new item
             CartItem newItem = new CartItem();
             newItem.setId(cartItemId);
             newItem.setProductName(item.getProductName());
@@ -80,24 +103,55 @@ public class CartController {
             newItem.setQuantity(item.getQuantity());
             newItem.setVoucher(item.getVoucher());
             newItem.setCart(cart);
-            // logger.info("new item: {}",newItem);
 
-            cartItemRepository.save(newItem);
+            cart.getItems().add(newItem);
         }
 
+        // Step 3: update Redis
+        cartRedisTemplate.opsForValue().set(redisKey, cart);
+        logger.info("Cart updated in Redis for customer {}", customerId);
+
+        // Step 4: save to db
+        asyncUpdateCartInDatabase(cart);
+
         return ResponseEntity.accepted().build();
+    }
+
+    @Async
+    public void asyncUpdateCartInDatabase(Cart cart) {
+        try {
+
+            cartRepository.save(cart);
+
+            cartItemRepository.saveAll(cart.getItems());
+            logger.info("Cart and items updated in MySQL for customer {}", cart.getCustomerId());
+        } catch (Exception e) {
+            logger.error("Failed to update cart in MySQL for customer {}", cart.getCustomerId(), e);
+        }
     }
 
     @PostMapping("/{customerId}/checkout")
     public ResponseEntity<?> notifyCheckout(@PathVariable int customerId,
             @RequestBody CustomerCheckout customerCheckout) {
-        // logger.info("received customer checkout:{}", customerCheckout);
+        logger.info("Received checkout request for customer: {}", customerId);
+
         if (customerId != customerCheckout.getCustomerId()) {
             return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
                     .body("Customer checkout payload does not match customer ID in URL.");
         }
 
-        Cart cart = cartRepository.findByCustomerId(customerCheckout.getCustomerId());
+        
+        String cartKey = "cart:" + customerId;
+        Cart cart = cartRedisTemplate.opsForValue().get(cartKey);
+
+        if (cart == null) {
+            cart = cartRepository.findByCustomerId(customerCheckout.getCustomerId());
+            if (cart != null) {
+                cartRedisTemplate.opsForValue().set(cartKey, cart);
+                logger.info("Cart found in MySQL and cached in Redis for customer: {}", customerId);
+            }
+        }
+
         if (cart == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body("Customer " + customerCheckout.getCustomerId() + " cart cannot be found.");
@@ -109,9 +163,24 @@ public class CartController {
                             + " cart has already been submitted for checkout.");
         }
 
-        List<CartItem> items = cartItemRepository.findByCustomerId(customerCheckout.getCustomerId());
-        if (items == null || items.isEmpty()) {
-            logger.warn("Customer {0} cart has already been submitted to checkout", customerCheckout.getCustomerId());
+        
+        List<CartItem> items = new ArrayList<>();
+        for (CartItem dbItem : cartItemRepository.findByCustomerId(customerCheckout.getCustomerId())) {
+            String cartItemKey = generateCartItemRedisKey(dbItem);
+            CartItem redisItem = cartItemRedisTemplate.opsForValue().get(cartItemKey);
+
+            if (redisItem != null) {
+                items.add(redisItem);
+                logger.info("CartItem found in Redis: {}", redisItem);
+            } else {
+                items.add(dbItem); 
+                cartItemRedisTemplate.opsForValue().set(cartItemKey, dbItem);
+                logger.info("CartItem cached in Redis: {}", dbItem);
+            }
+        }
+
+        if (items.isEmpty()) {
+            logger.warn("Customer {} cart has no items to submit for checkout", customerCheckout.getCustomerId());
             cartService.processPoisonCheckout(customerCheckout, MarkStatus.NOT_ACCEPTED);
             return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
                     .body("Customer " + customerCheckout.getCustomerId()
@@ -127,22 +196,24 @@ public class CartController {
         }
     }
 
+    private String generateCartItemRedisKey(CartItem item) {
+        return String.format("cartItem:%d:%d:%d", item.getId().getCustomerId(), item.getId().getProductId(),
+                item.getId().getSellerId());
+    }
+
     @GetMapping("/{customerId}")
     public ResponseEntity<?> get(@PathVariable int customerId) {
-    
+
         Cart cartEntity = cartRepository.findByCustomerId(customerId);
         if (cartEntity == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
 
-       
         List<CartItem> items = cartItemRepository.findByCustomerId(customerId);
 
-      
         com.example.common.entities.Cart responseCart = new com.example.common.entities.Cart();
         responseCart.setCustomerId(cartEntity.getCustomerId());
         responseCart.setStatus(cartEntity.getStatus());
-
 
         if (!items.isEmpty()) {
             List<com.example.common.entities.CartItem> cartItems = items.stream()
@@ -174,9 +245,7 @@ public class CartController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
 
-
         cartItemRepository.deleteByCustomerId(customerId);
-
 
         cartRepository.delete(cart);
 
@@ -185,15 +254,32 @@ public class CartController {
 
     @PatchMapping("/{customerId}/seal")
     public ResponseEntity<?> seal(@PathVariable int customerId) {
+        logger.info("Received request to seal cart for customer: {}", customerId);
 
-        Cart cart = cartRepository.findByCustomerId(customerId);
-        if (cart == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        String redisKey = "cart:" + customerId;
+        Cart cart;
+
+        try {
+
+            cart = (Cart) cartRedisTemplate.opsForValue().get(redisKey);
+            if (cart != null) {
+                logger.info("Cart found in Redis for customer: {}", customerId);
+            } else {
+
+                cart = cartRepository.findByCustomerId(customerId);
+                if (cart == null) {
+                    logger.warn("Cart not found for customer: {}", customerId);
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+                }
+            }
+
+            cartService.seal(cart, true);
+
+            return ResponseEntity.accepted().body("Cart sealed successfully for customer: " + customerId);
+        } catch (Exception e) {
+            logger.error("Error sealing cart for customer: {}", customerId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error sealing cart.");
         }
-
-        cartService.seal(cart, true);
-        return ResponseEntity.accepted().build();
-
     }
 
     @PatchMapping("/cleanup")
